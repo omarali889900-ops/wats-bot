@@ -14,7 +14,7 @@ const BASE_URL       = `https://api.green-api.com/waInstance${ID_INSTANCE}`;
 //  بيانات العيادة (عدّل عليها براحتك)
 // ═══════════════════════════════════════════
 const CLINIC = {
-  name:    'عيادة الابتسامة للأسنان',
+  name:    'المركز الملكي للأسنان',
   address: '٢٣ شارع التحرير، الدور الثالث، المهندسين، الجيزة',
   phone:   '٠١٢٣-٤٥٦-٧٨٩',
   hours:   'السبت – الخميس: ١٠ص – ٩م | الجمعة: ٤ع – ٩م',
@@ -30,6 +30,12 @@ const SERVICES = `
 😬 قلع أسنان          → من ٢٠٠ إلى ٥٠٠ جنيه
 `;
 
+
+// تحويل الأرقام العربية للإنجليزية
+function normalizeNum(str) {
+  const arabicNums = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+  return str.replace(/[٠-٩]/g, d => arabicNums.indexOf(d).toString());
+}
 // ═══════════════════════════════════════════
 //  إرسال رسالة
 // ═══════════════════════════════════════════
@@ -53,11 +59,11 @@ const userState = {};
 //  منطق البوت
 // ═══════════════════════════════════════════
 async function handleMessage(chatId, text) {
-  const msg = text.trim();
+  const msg = normalizeNum(text.trim());
   const state = userState[chatId] || 'welcome';
 
   // ── القائمة الرئيسية ──
-  if (['مرحبا','هلو','أهلا','اهلا','hi','hello','ابدأ','ابدا','1'].includes(msg.toLowerCase()) || state === 'welcome') {
+  if (['مرحبا','هلو','أهلا','اهلا','hi','hello','ابدأ','ابدا','1','٠'].includes(msg.toLowerCase()) || msg === '0' || state === 'welcome') {
     userState[chatId] = 'menu';
     await sendMessage(chatId,
       `أهلًا وسهلًا بك في *${CLINIC.name}* 😊\n\nاختار من القائمة:\n\n` +
