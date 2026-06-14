@@ -4,40 +4,58 @@ const app = express();
 app.use(express.json());
 
 // ═══════════════════════════════════════════
-//  ضع بياناتك هنا (لا تشاركها مع أي حد)
+//  المتغيرات من Railway
 // ═══════════════════════════════════════════
-const ID_INSTANCE    = process.env.ID_INSTANCE;
-const API_TOKEN      = process.env.API_TOKEN;
-const BASE_URL       = `https://api.green-api.com/waInstance${ID_INSTANCE}`;
+const ID_INSTANCE     = process.env.ID_INSTANCE;
+const API_TOKEN       = process.env.API_TOKEN;
+const ANTHROPIC_KEY   = process.env.ANTHROPIC_API_KEY;
 
 // ═══════════════════════════════════════════
-//  بيانات العيادة (عدّل عليها براحتك)
+//  بيانات العيادة
 // ═══════════════════════════════════════════
 const CLINIC = {
   name:    'المركز الملكي للأسنان',
   address: '٢٣ شارع التحرير، الدور الثالث، المهندسين، الجيزة',
   phone:   '٠١٢٣-٤٥٦-٧٨٩',
-  hours:   'السبت – الخميس: 1م – 10م ',
+  hours:   'السبت – الخميس: ١٠ص – ٩م | الجمعة: ٤ع – ٩م',
 };
 
 const SERVICES = `
-🦷 حشو الأسنان        → من ٢٠٠ إلى ٤٠٠ جنيه
-🌟 تبييض الأسنان      → من ٨٠٠ إلى ١٢٠٠ جنيه
-👑 تركيب كراون        → من ١٥٠٠ إلى ٣٠٠٠ جنيه
-🦴 زراعة أسنان        → من ٥٠٠٠ إلى ٨٠٠٠ جنيه
-📐 تقويم أسنان        → من ٤٠٠٠ إلى ٧٠٠٠ جنيه
-🩺 كشف وتنظيف         → ١٥٠ جنيه
-😬 قلع أسنان          → من ٢٠٠ إلى ٥٠٠ جنيه
+- حشو الأسنان: من ٢٠٠ إلى ٤٠٠ جنيه
+- تبييض الأسنان: من ٨٠٠ إلى ١٢٠٠ جنيه
+- تركيب كراون: من ١٥٠٠ إلى ٣٠٠٠ جنيه
+- زراعة أسنان: من ٥٠٠٠ إلى ٨٠٠٠ جنيه
+- تقويم أسنان: من ٤٠٠٠ إلى ٧٠٠٠ جنيه
+- كشف وتنظيف: ١٥٠ جنيه
+- قلع أسنان: من ٢٠٠ إلى ٥٠٠ جنيه
 `;
 
+const SYSTEM_PROMPT = `أنت مساعد ذكي لـ "${CLINIC.name}". اسمك "دكتور بوت" 🦷
 
-// تحويل الأرقام العربية للإنجليزية
-function normalizeNum(str) {
-  const arabicNums = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
-  return str.replace(/[٠-٩]/g, d => arabicNums.indexOf(d).toString());
-}
+معلومات العيادة:
+- العنوان: ${CLINIC.address}
+- التليفون: ${CLINIC.phone}
+- مواعيد العمل: ${CLINIC.hours}
+
+الخدمات والأسعار:
+${SERVICES}
+
+تعليمات مهمة:
+- تكلم المريض بالعربي العامية المصرية بشكل ودي ومريح
+- لو المريض عايز يحجز موعد، اطلب منه: الاسم، رقم الموبايل، الخدمة، التاريخ والوقت المناسب
+- لو المريض عنده ألم أو مشكلة، تعاطف معاه واقترحله يحجز موعد طوارئ
+- لو سألك عن سعر، قوله السعر من القائمة
+- لو خلصت بيانات الحجز كلها، قوله "تم استلام طلب حجزك وهنتصل بيك خلال ٣٠ دقيقة للتأكيد"
+- ردودك تكون قصيرة ومفيدة، مش أكتر من ٣ أسطر
+- استخدم إيموجي بشكل معقول 😊`;
+
 // ═══════════════════════════════════════════
-//  إرسال رسالة
+//  تاريخ المحادثات
+// ═══════════════════════════════════════════
+const conversations = {};
+
+// ═══════════════════════════════════════════
+//  إرسال رسالة لـ Green API
 // ═══════════════════════════════════════════
 async function sendMessage(chatId, message) {
   try {
@@ -51,160 +69,44 @@ async function sendMessage(chatId, message) {
 }
 
 // ═══════════════════════════════════════════
-//  حالة المستخدمين (مؤقت في الذاكرة)
+//  Claude AI
 // ═══════════════════════════════════════════
-const userState = {};
+async function askClaude(chatId, userMessage) {
+  if (!conversations[chatId]) conversations[chatId] = [];
 
-// ═══════════════════════════════════════════
-//  منطق البوت
-// ═══════════════════════════════════════════
-async function handleMessage(chatId, text) {
-  const msg = normalizeNum(text.trim());
-  const state = userState[chatId] || 'welcome';
+  conversations[chatId].push({ role: 'user', content: userMessage });
 
-  // ── القائمة الرئيسية ──
-  const isGreeting = ['مرحبا','هلو','أهلا','اهلا','hi','hello','ابدأ','ابدا'].includes(msg.toLowerCase());
-  const isInBooking = ['book_name','book_phone','book_service','book_date','book_time'].includes(state);
-  if ((isGreeting || state === 'welcome') && !isInBooking) {
-    userState[chatId] = 'menu';
-    await sendMessage(chatId,
-      `أهلًا وسهلًا بك في *${CLINIC.name}* 😊\n\nاختار من القائمة:\n\n` +
-      `1️⃣ حجز موعد\n` +
-      `2️⃣ الأسعار والخدمات\n` +
-      `3️⃣ الموقع ومواعيد العمل\n` +
-      `4️⃣ أسئلة شائعة\n\n` +
-      `_اكتب رقم الاختيار_`
-    );
-    return;
+  // احتفظ بآخر ١٠ رسائل بس عشان متتقلش
+  if (conversations[chatId].length > 20) {
+    conversations[chatId] = conversations[chatId].slice(-20);
   }
 
-  // ── المنيو ──
-  if (state === 'menu') {
-    if (msg === '1' || msg.includes('حجز') || msg.includes('موعد')) {
-      userState[chatId] = 'book_name';
-      await sendMessage(chatId, `📅 *حجز موعد جديد*\n\nاكتب اسمك الكريم:`);
+  try {
+    const response = await axios.post('https://api.anthropic.com/v1/messages', {
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      system: SYSTEM_PROMPT,
+      messages: conversations[chatId],
+    }, {
+      headers: {
+        'x-api-key': ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      }
+    });
 
-    } else if (msg === '2' || msg.includes('سعر') || msg.includes('خدمة')) {
-      await sendMessage(chatId, `💰 *قائمة الأسعار والخدمات*\n${SERVICES}\n_* الأسعار تقديرية وقد تختلف حسب الحالة_`);
-      await showMainMenu(chatId);
+    const reply = response.data.content[0].text;
+    conversations[chatId].push({ role: 'assistant', content: reply });
+    return reply;
 
-    } else if (msg === '3' || msg.includes('موقع') || msg.includes('عنوان')) {
-      await sendMessage(chatId,
-        `📍 *موقع العيادة*\n\n` +
-        `🏥 ${CLINIC.address}\n` +
-        `📞 ${CLINIC.phone}\n` +
-        `🕒 ${CLINIC.hours}\n\n` +
-        `https://maps.google.com`
-      );
-      await showMainMenu(chatId);
-
-    } else if (msg === '4' || msg.includes('سؤال') || msg.includes('استفسار')) {
-      userState[chatId] = 'faq';
-      await sendMessage(chatId,
-        `❓ *الأسئلة الشائعة*\n\n` +
-        `1️⃣ هل في تخدير؟\n` +
-        `2️⃣ كم وقت الجلسة؟\n` +
-        `3️⃣ هل يوجد تأمين؟\n` +
-        `4️⃣ طوارئ وألم شديد\n` +
-        `0️⃣ رجوع للقائمة`
-      );
-    } else {
-      await sendMessage(chatId, `مش فاهم 😅\nاكتب *مرحبا* للقائمة الرئيسية`);
-    }
-    return;
+  } catch (err) {
+    console.error('خطأ في Claude:', err.message);
+    return 'معلش في مشكلة مؤقتة، حاول تاني بعد شوية 😅';
   }
-
-  // ── الأسئلة الشائعة ──
-  if (state === 'faq') {
-    const faqs = {
-      '1': `✅ *التخدير*\nكل العمليات بتتعمل تحت تخدير موضعي كامل — مش هتحس بأي ألم إن شاء الله 😊`,
-      '2': `⏰ *وقت الجلسة*\n- كشف وتنظيف: ٣٠ دقيقة\n- حشو: ٤٥-٦٠ دقيقة\n- كراون: ساعة وربع\n- زراعة: من ساعة لساعتين`,
-      '3': `💳 *التأمين*\nللأسف حاليًا العيادة مش متعاملة مع شركات التأمين، بس الأسعار معقولة جدًا ومنافسة 👍`,
-      '4': `🚨 *طوارئ*\nفي حالات الألم الشديد، اتصل فورًا:\n📞 ${CLINIC.phone}\nهنخصصلك موعد في نفس اليوم إن شاء الله`,
-      '0': null,
-    };
-    if (msg === '0') {
-      userState[chatId] = 'menu';
-      await showMainMenu(chatId);
-    } else if (faqs[msg]) {
-      await sendMessage(chatId, faqs[msg]);
-      await showMainMenu(chatId);
-    } else {
-      await sendMessage(chatId, `اكتب رقم من ١ إلى ٤ أو ٠ للرجوع`);
-    }
-    return;
-  }
-
-  // ── حجز الموعد ──
-  if (state === 'book_name') {
-    userState[chatId] = 'book_phone';
-    userState[chatId + '_booking'] = { name: msg };
-    await sendMessage(chatId, `شكرًا يا *${msg}* 😊\nاكتب رقم موبايلك:`);
-    return;
-  }
-
-  if (state === 'book_phone') {
-    userState[chatId] = 'book_service';
-    userState[chatId + '_booking'].phone = msg;
-    await sendMessage(chatId,
-      `اختار الخدمة المطلوبة:\n\n` +
-      `1️⃣ حشو أسنان\n2️⃣ تبييض أسنان\n3️⃣ تركيب كراون\n` +
-      `4️⃣ زراعة أسنان\n5️⃣ تقويم\n6️⃣ كشف وتنظيف\n7️⃣ قلع أسنان`
-    );
-    return;
-  }
-
-  if (state === 'book_service') {
-    const services = { '1':'حشو أسنان','2':'تبييض أسنان','3':'تركيب كراون','4':'زراعة أسنان','5':'تقويم','6':'كشف وتنظيف','7':'قلع أسنان' };
-    const service = services[msg] || msg;
-    userState[chatId] = 'book_date';
-    userState[chatId + '_booking'].service = service;
-    await sendMessage(chatId, `اكتب التاريخ المناسب ليك:\n_مثال: ١٥ يونيو_`);
-    return;
-  }
-
-  if (state === 'book_date') {
-    userState[chatId] = 'book_time';
-    userState[chatId + '_booking'].date = msg;
-    await sendMessage(chatId,
-      `اختار الوقت المناسب:\n\n` +
-      `1️⃣ ١٠ صباحًا\n2️⃣ ١٢ ظهرًا\n3️⃣ ٢ عصرًا\n4️⃣ ٤ عصرًا\n5️⃣ ٦ مساءً\n6️⃣ ٨ مساءً`
-    );
-    return;
-  }
-
-  if (state === 'book_time') {
-    const times = { '1':'١٠ صباحًا','2':'١٢ ظهرًا','3':'٢ عصرًا','4':'٤ عصرًا','5':'٦ مساءً','6':'٨ مساءً' };
-    const time = times[msg] || msg;
-    const b = userState[chatId + '_booking'];
-    b.time = time;
-    userState[chatId] = 'menu';
-
-    await sendMessage(chatId,
-      `✅ *تم استلام طلب حجزك!*\n\n` +
-      `👤 الاسم: ${b.name}\n` +
-      `🦷 الخدمة: ${b.service}\n` +
-      `📅 التاريخ: ${b.date} – ${b.time}\n` +
-      `📞 الموبايل: ${b.phone}\n\n` +
-      `هنتصل بيك خلال ٣٠ دقيقة لتأكيد الموعد 😊`
-    );
-    return;
-  }
-
-  // Default
-  await sendMessage(chatId, `اكتب *مرحبا* للقائمة الرئيسية 😊`);
-}
-
-async function showMainMenu(chatId) {
-  userState[chatId] = 'menu';
-  await sendMessage(chatId,
-    `في حاجة تانية أقدر أساعدك فيها؟\n\n` +
-    `1️⃣ حجز موعد\n2️⃣ الأسعار\n3️⃣ الموقع\n4️⃣ أسئلة`
-  );
 }
 
 // ═══════════════════════════════════════════
-//  Webhook — يستقبل الرسائل من Green API
+//  Webhook
 // ═══════════════════════════════════════════
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
@@ -216,10 +118,13 @@ app.post('/webhook', async (req, res) => {
   if (!chatId || !text) return;
 
   console.log(`📩 رسالة من ${chatId}: ${text}`);
-  await handleMessage(chatId, text);
+
+  const reply = await askClaude(chatId, text);
+  console.log(`🤖 رد البوت: ${reply}`);
+  await sendMessage(chatId, reply);
 });
 
-app.get('/', (req, res) => res.send('🦷 بوت عيادة الأسنان شغال!'));
+app.get('/', (req, res) => res.send('🦷 المركز الملكي للأسنان - البوت شغال!'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ البوت شغال على بورت ${PORT}`));
