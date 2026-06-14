@@ -6,8 +6,8 @@ app.use(express.json());
 // ═══════════════════════════════════════════
 //  ضع بياناتك هنا (لا تشاركها مع أي حد)
 // ═══════════════════════════════════════════
-const ID_INSTANCE    = 'ضع idInstance هنا';
-const API_TOKEN      = 'ضع apiTokenInstance هنا';
+const ID_INSTANCE    = process.env.ID_INSTANCE;
+const API_TOKEN      = process.env.API_TOKEN;
 const BASE_URL       = `https://api.green-api.com/waInstance${ID_INSTANCE}`;
 
 // ═══════════════════════════════════════════
@@ -35,9 +35,9 @@ const SERVICES = `
 // ═══════════════════════════════════════════
 async function sendMessage(chatId, message) {
   try {
-    await axios.post(`${BASE_URL}/sendMessage/${API_TOKEN}`, {
-      chatId,
-      message,
+    const url = `https://7107.api.greenapi.com/waInstance${ID_INSTANCE}/sendMessage/${API_TOKEN}`;
+    await axios.post(url, { chatId, message }, {
+      headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {
     console.error('خطأ في الإرسال:', err.message);
