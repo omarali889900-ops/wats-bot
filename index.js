@@ -17,7 +17,7 @@ const CLINIC = {
   name:    'المركز الملكي للأسنان',
   address: '٢٣ شارع التحرير، الدور الثالث، المهندسين، الجيزة',
   phone:   '٠١٢٣-٤٥٦-٧٨٩',
-  hours:   'السبت – الخميس: ١٠ص – ٩م | الجمعة: ٤ع – ٩م',
+  hours:   'السبت – الخميس: 1م – 10م ',
 };
 
 const SERVICES = `
@@ -63,7 +63,9 @@ async function handleMessage(chatId, text) {
   const state = userState[chatId] || 'welcome';
 
   // ── القائمة الرئيسية ──
-  if (['مرحبا','هلو','أهلا','اهلا','hi','hello','ابدأ','ابدا','1','٠'].includes(msg.toLowerCase()) || msg === '0' || state === 'welcome') {
+  const isGreeting = ['مرحبا','هلو','أهلا','اهلا','hi','hello','ابدأ','ابدا'].includes(msg.toLowerCase());
+  const isInBooking = ['book_name','book_phone','book_service','book_date','book_time'].includes(state);
+  if ((isGreeting || state === 'welcome') && !isInBooking) {
     userState[chatId] = 'menu';
     await sendMessage(chatId,
       `أهلًا وسهلًا بك في *${CLINIC.name}* 😊\n\nاختار من القائمة:\n\n` +
