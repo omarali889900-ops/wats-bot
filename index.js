@@ -9,6 +9,7 @@ app.use(express.json());
 const ID_INSTANCE     = process.env.ID_INSTANCE;
 const API_TOKEN       = process.env.API_TOKEN;
 const ANTHROPIC_KEY   = process.env.ANTHROPIC_API_KEY;
+const CLINIC_PHONE    = '201552762769@c.us'; // رقم العيادة لاستقبال إشعارات الحجز
 
 // ═══════════════════════════════════════════
 //  بيانات العيادة
@@ -17,10 +18,23 @@ const CLINIC = {
   name:    'المركز الملكي للأسنان',
   address: 'https://maps.app.goo.gl/8J9ttWcARmAWw4r78',
   phone:   '+20 10 99595956',
-  hours:   'كل الايام من الساعه 1 م حتي الساعه 11 م عدا يوم الجمعة',
+  hours:   'كل الأيام من ١ ظهراً لـ ١١ مساءً',
 };
 
-const SERVICES = `
+const SERVICES_LIST = `
+- كشف وفحص
+- تنظيف الجير مع التلميع
+- حشو عادي
+- حشو عصب مع طربوش
+- خلع سن عادي
+- خلع جراحي
+- كوبري
+- زراعة سن
+- تقويم أسنان
+- زراعة الفك الكامل
+`;
+
+const PRICES_LIST = `
 - كشف وفحص: ٧٠٠ جنيه
 - تنظيف الجير مع التلميع: ١٨٠٠ جنيه
 - حشو عادي: ٢٠٠٠ جنيه
@@ -33,25 +47,34 @@ const SERVICES = `
 - زراعة الفك الكامل: تكلفة تصل لـ ١٣٠٠٠٠ جنيه وتختلف من حالة لأخرى (غير شاملة التركيبة)
 `;
 
-const SYSTEM_PROMPT = `أنت مساعدة ذكية تمثلين المركز الملكي للأسنان. اسمك "دكتورة لسا هنسميها" 🦷
+const SYSTEM_PROMPT = `أنت مساعدة ذكية تمثلين المركز الملكي للأسنان. اسمك "دكتورة مي" 🦷
 
 معلومات المركز:
 - الموقع: ${CLINIC.address}
 - التليفون: ${CLINIC.phone}
 - مواعيد العمل: ${CLINIC.hours}
 
-الخدمات والأسعار:
-${SERVICES}
+الخدمات المتاحة:
+${SERVICES_LIST}
+
+الأسعار (لا تذكريها إلا إذا سأل المريض عن السعر تحديداً):
+${PRICES_LIST}
 
 تعليمات مهمة جداً:
 - تكلمي المريض باللغة العربية الفصحى البسيطة بأسلوب ودي ومحترم
 - لا تستخدمي عامية أو كلمات إنجليزية
-- لو المريض أراد حجز موعد، اطلبي منه: الاسم الكريم، رقم الهاتف، الخدمة المطلوبة، واليوم والوقت المناسب
+- لو المريض سأل عن الخدمات، اذكري الخدمات فقط بدون أسعار
+- لو المريض سأل عن السعر تحديداً، أخبريه بالسعر من القائمة
+- لو المريض أراد حجز موعد، اطلبي منه: الاسم الكريم، رقم الهاتف، الخدمة المطلوبة، اليوم والوقت المناسب
+- لو الخدمة المطلوبة هي زراعة سن، اطلبي منه إرسال صورة الأشعة أو صورة الفك (يمكن إرسالها كصورة أو PDF)
+- لو اكتملت بيانات الحجز (الاسم، الهاتف، الخدمة، الموعد)، قولي له: "تم استلام طلب حجزكم وسيتم التواصل معكم خلال ٣٠ دقيقة لتأكيد الموعد" ثم أضيفي في ردك كلمة [BOOKING_COMPLETE] متبوعة ببيانات الحجز بالشكل التالي:
+[BOOKING_COMPLETE]
+الاسم: ...
+الهاتف: ...
+الخدمة: ...
+الموعد: ...
 - لو المريض يشكو من ألم، تعاطفي معه واقترحي له حجز موعد عاجل
-- لو سأل عن سعر، أخبريه بالسعر من القائمة بدقة
-- لو اكتملت بيانات الحجز، قولي له: "تم استلام طلب حجزكم وسيتم التواصل معكم خلال ٣٠ دقيقة لتأكيد الموعد"
 - ردودك تكون مختصرة ومفيدة، لا تتجاوز ٣ أسطر
-- بالنسبة لزراعة الفك الكامل، وضحي أن التكلفة تختلف من حالة لأخرى وقد تصل إلى ١٣٠٠٠٠ جنيه للزراعة فقط، غير شاملة التركيبة
 - استخدمي إيموجي بشكل لطيف 😊`;
 
 // ═══════════════════════════════════════════
@@ -60,7 +83,7 @@ ${SERVICES}
 const conversations = {};
 
 // ═══════════════════════════════════════════
-//  إرسال رسالة لـ Green API
+//  إرسال رسالة نصية
 // ═══════════════════════════════════════════
 async function sendMessage(chatId, message) {
   try {
@@ -74,6 +97,15 @@ async function sendMessage(chatId, message) {
 }
 
 // ═══════════════════════════════════════════
+//  إشعار العيادة عند اكتمال الحجز
+// ═══════════════════════════════════════════
+async function notifyClinic(bookingInfo) {
+  const msg = `🔔 *حجز موعد جديد!*\n\n${bookingInfo}\n\n_يرجى التواصل مع المريض لتأكيد الموعد_`;
+  await sendMessage(CLINIC_PHONE, msg);
+  console.log('✅ تم إرسال إشعار للعيادة');
+}
+
+// ═══════════════════════════════════════════
 //  Claude AI
 // ═══════════════════════════════════════════
 async function askClaude(chatId, userMessage) {
@@ -81,7 +113,6 @@ async function askClaude(chatId, userMessage) {
 
   conversations[chatId].push({ role: 'user', content: userMessage });
 
-  // احتفظ بآخر ١٠ رسائل بس عشان متتقلش
   if (conversations[chatId].length > 20) {
     conversations[chatId] = conversations[chatId].slice(-20);
   }
@@ -100,9 +131,19 @@ async function askClaude(chatId, userMessage) {
       }
     });
 
-    const reply = response.data.content[0].text;
-    conversations[chatId].push({ role: 'assistant', content: reply });
-    return reply;
+    const fullReply = response.data.content[0].text;
+    conversations[chatId].push({ role: 'assistant', content: fullReply });
+
+    // لو في حجز مكتمل
+    if (fullReply.includes('[BOOKING_COMPLETE]')) {
+      const parts = fullReply.split('[BOOKING_COMPLETE]');
+      const replyToUser = parts[0].trim();
+      const bookingInfo = parts[1].trim();
+      await notifyClinic(bookingInfo);
+      return replyToUser;
+    }
+
+    return fullReply;
 
   } catch (err) {
     console.error('خطأ في Claude:', err.message);
@@ -111,7 +152,7 @@ async function askClaude(chatId, userMessage) {
 }
 
 // ═══════════════════════════════════════════
-//  Webhook
+//  Webhook - استقبال الرسائل والملفات
 // ═══════════════════════════════════════════
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
@@ -119,11 +160,29 @@ app.post('/webhook', async (req, res) => {
   if (body.typeWebhook !== 'incomingMessageReceived') return;
 
   const chatId = body.senderData?.chatId;
-  const text   = body.messageData?.textMessageData?.textMessage;
-  if (!chatId || !text) return;
+
+  // رسالة نصية
+  const text = body.messageData?.textMessageData?.textMessage;
+
+  // صورة أو PDF
+  const fileMsg = body.messageData?.fileMessageData;
+  const imgMsg  = body.messageData?.imageMessageData;
+
+  if (!chatId) return;
+
+  // لو ملف أو صورة
+  if (fileMsg || imgMsg) {
+    const caption = fileMsg?.caption || imgMsg?.caption || '';
+    const fileType = fileMsg ? 'مستند/PDF' : 'صورة';
+    console.log(`📎 ملف من ${chatId}: ${fileType}`);
+    const reply = await askClaude(chatId, `[أرسل المريض ${fileType}] ${caption}`);
+    await sendMessage(chatId, reply);
+    return;
+  }
+
+  if (!text) return;
 
   console.log(`📩 رسالة من ${chatId}: ${text}`);
-
   const reply = await askClaude(chatId, text);
   console.log(`🤖 رد البوت: ${reply}`);
   await sendMessage(chatId, reply);
