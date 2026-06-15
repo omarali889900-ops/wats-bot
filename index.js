@@ -9,7 +9,7 @@ app.use(express.json());
 const ID_INSTANCE     = process.env.ID_INSTANCE;
 const API_TOKEN       = process.env.API_TOKEN;
 const ANTHROPIC_KEY   = process.env.ANTHROPIC_API_KEY;
-const CLINIC_PHONE    = '201552762769@c.us'; // رقم العيادة لاستقبال إشعارات الحجز
+const CLINIC_PHONE    = '201099595956@c.us'; // رقم العيادة لاستقبال إشعارات الحجز
 
 // ═══════════════════════════════════════════
 //  بيانات العيادة
@@ -157,6 +157,9 @@ app.post('/webhook', async (req, res) => {
   if (body.typeWebhook !== 'incomingMessageReceived') return;
 
   const chatId = body.senderData?.chatId;
+
+  // تجاهل رسائل رقم العيادة نفسه
+  if (chatId === CLINIC_PHONE) return;
 
   // رسالة نصية
   const text = body.messageData?.textMessageData?.textMessage;
