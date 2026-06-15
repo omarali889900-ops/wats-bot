@@ -9,7 +9,7 @@ app.use(express.json());
 const ID_INSTANCE     = process.env.ID_INSTANCE;
 const API_TOKEN       = process.env.API_TOKEN;
 const ANTHROPIC_KEY   = process.env.ANTHROPIC_API_KEY;
-const CLINIC_PHONE    = '01552762769@c.us'; // رقم العيادة لاستقبال إشعارات الحجز
+const CLINIC_PHONE    = '201552762769@c.us'; // رقم العيادة لاستقبال إشعارات الحجز
 
 // ═══════════════════════════════════════════
 //  بيانات العيادة
