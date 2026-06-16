@@ -195,7 +195,7 @@ async function notifyContactRequest(chatId, patientInfo) {
 }
 
 // ===== Claude للمحادثة الحرة =====
-const FREE_CHAT_SYSTEM = `أنت مساعدة ذكية تمثلين المركز الملكي للأسنان دكتور محمد حسن رشاد. اسمك "دكتور س" 🦷
+const FREE_CHAT_SYSTEM = `أنت مساعدة ذكية تمثلين المركز الملكي للأسنان دكتور محمد حسن رشاد. اسمك "دكتور ع" 🦷
 
 معلومات المركز:
 - الموقع: ${CLINIC.address}
