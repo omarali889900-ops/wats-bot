@@ -11,9 +11,9 @@ const CLINIC_BOOKING_PHONE = '201552762769@c.us';
 const CLINIC_DOCTOR_PHONE  = '201552762764@c.us';
 
 const CLINIC = {
-  name:    'المركز الملكي للأسنان - دكتور محمد حسن رشاد',
+  name:  'المركز الملكي للأسنان - دكتور محمد حسن رشاد',
   address: 'https://maps.app.goo.gl/8J9ttWcARmAWw4r78',
-  hours:   'كل الأيام من ١ ظهراً لـ ١١ مساءً',
+  hours: 'كل الأيام من ١ ظهراً لـ ١١ مساءً (ماعدا الجمعة)',
 };
 
 const SERVICES_LIST = `
@@ -30,8 +30,27 @@ const SERVICES_LIST = `
 - قص وتجميل اللثة: ٦٥٠ جنيه للسن
 - زراعة سن: من ١٥٠٠٠ إلى ٢٥٠٠٠ جنيه
 - تقويم أسنان: حسب خطة العلاج
-- زراعة الفك الكامل: تصل لـ ١٣٠٠٠٠ جنيه (غير شاملة التركيبة)
+- زراعة الفك الكامل: تبدأ من ١٥٠,٠٠٠ جنيه شامل التركيب المؤقت الثابت
 `;
+
+const FULL_JAW_MSG = `💎 *زراعة الفك الكامل*
+
+السعر يبدأ من *١٥٠,٠٠٠ جنيه* للفك الواحد شامل التركيب المؤقت الثابت 🦷
+
+*السعر يشمل الآتي:*
+
+• خلع الأسنان أو بقايا الأسنان المتهالكة طبقاً للخطة العلاجية
+• تركيب ١٤ سن مؤقت لكل فك عند اللزوم
+• التطعيم العظمي لكل زرعة حسب الاحتياج
+• تركيب شبكة أو غشاء للزرعات حسب الاحتياج
+• زراعة فك كامل بعدد ٦-٨ زرعات أوروبية حسب الحاجة
+
+_الخدمات دي كلها تفصيل للسعر اللي بيبدأ من ١٥٠ ألف جنيه_ 😊`;
+
+// تحويل الأرقام العربية للإنجليزية
+function toEnglishNum(str) {
+  return str.replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+}
 
 // المواعيد كل نص ساعة من 1ظ لـ 11م
 const ALL_SLOTS = [];
@@ -46,17 +65,73 @@ const bookedSlots = new Set();
 function formatSlot(slot) {
   const [h, m] = slot.split(':').map(Number);
   const hour12 = h > 12 ? h - 12 : h;
-  const period = h >= 12 ? 'م' : 'ص';
-  return `${hour12}:${m === 0 ? '٠٠' : '٣٠'} ${period}`;
+  return `${hour12}:${m === 0 ? '٠٠' : '٣٠'} م`;
 }
 
 function getAvailableSlots() {
   return ALL_SLOTS.filter(s => !bookedSlots.has(s));
 }
 
-const MAIN_MENU = `أهلاً وسهلاً بكم في *${CLINIC.name}* 🦷\n\nكيف يمكنني مساعدتكم؟\n\n1️⃣ حجز موعد\n2️⃣ عنوان المركز ومواعيد العمل\n3️⃣ الخدمات والأسعار`;
+// تحويل التاريخ لرقمي واضح
+function parseDate(input) {
+  const arabicMonths = {
+    'يناير': 1, 'فبراير': 2, 'مارس': 3, 'أبريل': 4, 'ابريل': 4,
+    'مايو': 5, 'يونيو': 6, 'يونيه': 6, 'يوليو': 7, 'يوليه': 7,
+    'أغسطس': 8, 'اغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'اكتوبر': 10,
+    'نوفمبر': 11, 'ديسمبر': 12
+  };
 
-// حالة المستخدمين
+  let normalized = toEnglishNum(input.trim());
+  const now = new Date();
+  let day, month, year;
+
+  // "هذا الشهر" أو "الشهر ده"
+  if (normalized.includes('هذا الشهر') || normalized.includes('الشهر ده') || normalized.includes('الشهر الحالي')) {
+    const dayMatch = normalized.match(/(\d+)/);
+    if (dayMatch) {
+      day = parseInt(dayMatch[1]);
+      month = now.getMonth() + 1;
+      year = now.getFullYear();
+    }
+  } else {
+    // ابحث عن اسم الشهر
+    for (const [name, num] of Object.entries(arabicMonths)) {
+      if (normalized.includes(name)) {
+        month = num;
+        const dayMatch = normalized.match(/(\d+)/);
+        if (dayMatch) day = parseInt(dayMatch[1]);
+        year = now.getFullYear();
+        if (month < now.getMonth() + 1) year++;
+        break;
+      }
+    }
+    // لو رقمين فقط (يوم/شهر)
+    if (!day) {
+      const parts = normalized.match(/\d+/g);
+      if (parts && parts.length >= 2) {
+        day = parseInt(parts[0]);
+        month = parseInt(parts[1]);
+        year = now.getFullYear();
+      } else if (parts && parts.length === 1) {
+        day = parseInt(parts[0]);
+        month = now.getMonth() + 1;
+        year = now.getFullYear();
+      }
+    }
+  }
+
+  if (!day || !month || !year) return null;
+
+  const date = new Date(year, month - 1, day);
+  // تحقق إنه مش جمعة (5)
+  if (date.getDay() === 5) return { error: 'friday' };
+
+  const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  return { formatted: `${day} ${months[month-1]} ${year}`, date };
+}
+
+const MAIN_MENU = `أهلاً وسهلاً بيك في *${CLINIC.name}* 🦷\n\nازاي أقدر أساعدك؟\n\n1️⃣ حجز موعد\n2️⃣ عنوان المركز ومواعيد العمل\n3️⃣ الخدمات والأسعار`;
+
 const userState = {};
 const conversations = {};
 
@@ -97,7 +172,7 @@ async function notifyDoctor(chatId, name, phone) {
       `📢 *طلب تواصل جديد!*\n\n` +
       `👤 الاسم: ${name}\n` +
       `📞 الهاتف: ${phone}\n\n` +
-      `_المريض يريد التواصل مع أحد من المركز_`;
+      `_المريض عايز يتواصل مع حد من المركز_`;
     const url = `https://7107.api.greenapi.com/waInstance${ID_INSTANCE}/sendMessage/${API_TOKEN}`;
     await axios.post(url, { chatId: CLINIC_DOCTOR_PHONE, message: msg }, {
       headers: { 'Content-Type': 'application/json' }
@@ -117,11 +192,12 @@ async function askClaude(chatId, userMessage) {
     const response = await axios.post('https://api.anthropic.com/v1/messages', {
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,
-      system: `أنت مساعد ودي ومحترم للمركز الملكي للأسنان اسمك "دكتور ق".
-تكلم المريض بالعربية الفصحى البسيطة بأسلوب ودي.
+      system: `أنت مساعد ودي للمركز الملكي للأسنان اسمك "دكتور س".
+اتكلم مع المريض بالعامية المصرية بأسلوب ودي ومحترم.
 الخدمات والأسعار: ${SERVICES_LIST}
-ردودك قصيرة (٢-٣ أسطر). إذا كان المريض غاضباً أو محتاراً تعاطف معه وساعده بهدوء.
-لا تذكر أسعاراً إلا إذا سأل تحديداً.`,
+لو سأل عن زراعة فك كامل قوله السعر بيبدأ من ١٥٠ ألف جنيه وإنه يختار ٣ من القائمة عشان يعرف التفاصيل.
+ردودك قصيرة ٢-٣ أسطر بس. لو المريض زعلان تعاطف معاه.
+لا تبعت القائمة الرئيسية أبداً في ردك.`,
       messages: conversations[chatId],
     }, {
       headers: {
@@ -140,11 +216,11 @@ async function askClaude(chatId, userMessage) {
 }
 
 async function handleMessage(chatId, text) {
-  const msg = text.trim();
+  const raw = text.trim();
+  const msg = toEnglishNum(raw);
   const st  = userState[chatId] || { step: 'welcome' };
 
-  // ترحيب
-  const greetings = ['مرحبا','هلو','أهلا','اهلا','hi','hello','ابدأ','ابدا','السلام عليكم','صباح الخير','مساء الخير','هاي'];
+  const greetings = ['مرحبا','هلو','أهلا','اهلا','hi','hello','ابدأ','ابدا','السلام عليكم','صباح الخير','مساء الخير','هاي','هلا'];
   if (greetings.includes(msg.toLowerCase()) || st.step === 'welcome') {
     userState[chatId] = { step: 'main_menu' };
     await sendMessage(chatId, MAIN_MENU);
@@ -153,75 +229,88 @@ async function handleMessage(chatId, text) {
 
   // القائمة الرئيسية
   if (st.step === 'main_menu') {
-    if (msg === '1' || msg.includes('حجز')) {
+    if (msg === '1' || raw.includes('حجز')) {
       userState[chatId] = { step: 'book_name' };
-      await sendMessage(chatId, `📅 *حجز موعد جديد*\n\nمن فضلك أرسل اسمك الكريم:`);
+      await sendMessage(chatId, `📅 *حجز موعد جديد*\n\nاتفضل، ابعت اسمك الكريم:`);
       return;
     }
-    if (msg === '2' || msg.includes('عنوان') || msg.includes('موعد')) {
+    if (msg === '2' || raw.includes('عنوان') || raw.includes('فين')) {
       await sendMessage(chatId,
-        `📍 *عنوان المركز*\n${CLINIC.address}\n\n` +
-        `🕐 *مواعيد العمل*\n${CLINIC.hours}`
+        `📍 *عنوان المركز*\n${CLINIC.address}\n\n🕐 *مواعيد العمل*\n${CLINIC.hours}`
       );
-      await sendMessage(chatId, MAIN_MENU);
       return;
     }
-    if (msg === '3' || msg.includes('خدم') || msg.includes('سعر')) {
+    if (msg === '3' || raw.includes('خدم') || raw.includes('سعر') || raw.includes('أسعار')) {
+      // لو سأل عن زراعة فك كامل
+      if (raw.includes('فك') || raw.includes('زراعة فك')) {
+        await sendMessage(chatId, FULL_JAW_MSG);
+        return;
+      }
       await sendMessage(chatId, `🦷 *خدمات وأسعار المركز*\n${SERVICES_LIST}`);
-      await sendMessage(chatId, MAIN_MENU);
       return;
     }
-    // رد Claude لو مش اختيار
-    const reply = await askClaude(chatId, msg);
+
+    // سؤال عن زراعة فك كامل في أي وقت
+    if (raw.includes('فك كامل') || raw.includes('زراعة فك') || (raw.includes('زراع') && raw.includes('فك'))) {
+      await sendMessage(chatId, FULL_JAW_MSG);
+      return;
+    }
+
+    const reply = await askClaude(chatId, raw);
     await sendMessage(chatId, reply);
-    await sendMessage(chatId, MAIN_MENU);
     return;
   }
 
   // حجز - الاسم
   if (st.step === 'book_name') {
-    userState[chatId] = { ...st, step: 'book_phone', name: msg };
-    await sendMessage(chatId, `شكراً *${msg}* 😊\n\nمن فضلك أرسل رقم هاتفك:`);
+    userState[chatId] = { ...st, step: 'book_phone', name: raw };
+    await sendMessage(chatId, `تمام يا *${raw}* 😊\n\nابعت رقم موبايلك:`);
     return;
   }
 
   // حجز - الهاتف
   if (st.step === 'book_phone') {
-    userState[chatId] = { ...st, step: 'book_service', phone: msg };
-    await sendMessage(chatId,
-      `ما هي الخدمة المطلوبة؟\n\n` +
-      `_(مثال: كشف، حشو، زراعة، تنظيف...)_`
-    );
+    userState[chatId] = { ...st, step: 'book_service', phone: raw };
+    await sendMessage(chatId, `إيه الخدمة اللي محتاجها؟\n_(مثال: كشف، حشو، زراعة، تنظيف...)_`);
     return;
   }
 
   // حجز - الخدمة
   if (st.step === 'book_service') {
-    userState[chatId] = { ...st, step: 'book_date', service: msg };
-    if (msg.includes('زراع')) {
+    userState[chatId] = { ...st, step: 'book_date', service: raw };
+    if (raw.includes('زراع')) {
       await sendMessage(chatId,
-        `📎 لخدمة الزراعة يُفضل إرسال صورة الأشعة أو صورة الفك كصورة أو PDF.\n` +
-        `يمكنك إرسالها الآن أو لاحقاً.\n\n` +
-        `من فضلك أرسل التاريخ المناسب:\n_(مثال: ٢٠ يونيو)_`
+        `📎 للزراعة بيفضل تبعت صورة الأشعة أو صورة الفك (صورة أو PDF).\n` +
+        `تقدر تبعتها دلوقتي أو بعدين.\n\n` +
+        `ابعت التاريخ المناسب للموعد:\n_(مثال: ٢٠ يونيو)_`
       );
     } else {
-      await sendMessage(chatId, `من فضلك أرسل التاريخ المناسب للموعد:\n_(مثال: ٢٠ يونيو)_`);
+      await sendMessage(chatId, `ابعت التاريخ المناسب للموعد:\n_(مثال: ٢٠ يونيو)_`);
     }
     return;
   }
 
   // حجز - التاريخ
   if (st.step === 'book_date') {
-    const available = getAvailableSlots();
-    if (available.length === 0) {
-      await sendMessage(chatId, `عذراً، لا توجد مواعيد متاحة حالياً. تواصل معنا مباشرة 📞`);
-      userState[chatId] = { step: 'main_menu' };
-      await sendMessage(chatId, MAIN_MENU);
+    const parsed = parseDate(raw);
+    if (!parsed) {
+      await sendMessage(chatId, `مش فاهم التاريخ ده 😅\nابعته بشكل تاني مثلاً: *٢٠ يونيو*`);
       return;
     }
-    userState[chatId] = { ...st, step: 'book_slot', date: msg, availableSlots: available };
+    if (parsed.error === 'friday') {
+      await sendMessage(chatId, `عذراً، يوم الجمعة إجازة في المركز 🙏\nاختار يوم تاني:`);
+      return;
+    }
 
-    let slotsMsg = `📅 المواعيد المتاحة ليوم *${msg}*:\n\n`;
+    const available = getAvailableSlots();
+    if (available.length === 0) {
+      await sendMessage(chatId, `عذراً، مفيش مواعيد متاحة دلوقتي. تواصل معانا مباشرة 📞`);
+      userState[chatId] = { step: 'main_menu' };
+      return;
+    }
+
+    userState[chatId] = { ...st, step: 'book_slot', date: parsed.formatted, availableSlots: available };
+    let slotsMsg = `📅 المواعيد المتاحة ليوم *${parsed.formatted}*:\n\n`;
     available.forEach((slot, i) => {
       slotsMsg += `${i + 1}. ${formatSlot(slot)}\n`;
     });
@@ -236,61 +325,51 @@ async function handleMessage(chatId, text) {
     const choice = parseInt(msg) - 1;
 
     if (isNaN(choice) || choice < 0 || choice >= available.length) {
-      await sendMessage(chatId, `من فضلك اكتب رقم الموعد من القائمة 👆`);
+      await sendMessage(chatId, `اكتب رقم الموعد من القائمة اللي فوق 👆`);
       return;
     }
 
     const slot = available[choice];
     bookedSlots.add(slot);
 
+    userState[chatId] = { step: 'done' };
+
     await sendMessage(chatId,
-      `✅ *تم استلام طلب حجزكم!*\n\n` +
+      `✅ *تم استلام طلب حجزك!*\n\n` +
       `👤 ${st.name}\n` +
       `🦷 ${st.service}\n` +
       `📅 ${st.date} - ${formatSlot(slot)}\n\n` +
-      `سيتم التواصل معكم خلال ٣٠ دقيقة لتأكيد الموعد 😊`
+      `هيتم التواصل معاك في أقرب وقت ممكن 😊`
     );
 
     await notifyBooking({ ...st, slot });
-
-    userState[chatId] = { step: 'main_menu' };
-    setTimeout(async () => {
-      await sendMessage(chatId, MAIN_MENU);
-    }, 2000);
     return;
   }
 
-  // تواصل مع الدكتور - الاسم
+  // تواصل - الاسم
   if (st.step === 'contact_name') {
-    userState[chatId] = { ...st, step: 'contact_phone', name: msg };
-    await sendMessage(chatId, `شكراً *${msg}*! 😊\n\nمن فضلك أرسل رقم هاتفك:`);
+    userState[chatId] = { ...st, step: 'contact_phone', name: raw };
+    await sendMessage(chatId, `تمام يا *${raw}* 😊\n\nابعت رقم موبايلك:`);
     return;
   }
 
-  // تواصل مع الدكتور - الهاتف
+  // تواصل - الهاتف
   if (st.step === 'contact_phone') {
-    await sendMessage(chatId, `✅ تم إرسال طلبك!\nسيتواصل معك أحد فريق المركز قريباً 😊`);
-    await notifyDoctor(chatId, st.name, msg);
-    userState[chatId] = { step: 'main_menu' };
-    setTimeout(async () => {
-      await sendMessage(chatId, MAIN_MENU);
-    }, 2000);
+    await sendMessage(chatId, `✅ تم! هيتواصل معاك حد من المركز في أقرب وقت 😊`);
+    await notifyDoctor(chatId, st.name, raw);
+    userState[chatId] = { step: 'done' };
     return;
   }
 
-  // أي رسالة خارج السياق - Claude يرد
-  const reply = await askClaude(chatId, msg);
+  // سؤال عن زراعة فك في أي وقت
+  if (raw.includes('فك كامل') || raw.includes('زراعة فك') || (raw.includes('زراع') && raw.includes('فك'))) {
+    await sendMessage(chatId, FULL_JAW_MSG);
+    return;
+  }
+
+  // Claude للأسئلة الخارجة عن السياق
+  const reply = await askClaude(chatId, raw);
   await sendMessage(chatId, reply);
-
-  // لو ذكر التواصل
-  if (msg.includes('تواصل') || msg.includes('دكتور') || msg.includes('اتكلم')) {
-    userState[chatId] = { step: 'contact_name' };
-    await sendMessage(chatId, `بكل سرور! 😊\nمن فضلك أرسل اسمك الكريم:`);
-    return;
-  }
-
-  userState[chatId] = { step: 'main_menu' };
-  await sendMessage(chatId, MAIN_MENU);
 }
 
 // Webhook
@@ -309,8 +388,7 @@ app.post('/webhook', async (req, res) => {
 
   if (fileMsg || imgMsg) {
     const fileType = fileMsg ? 'مستند/PDF' : 'صورة';
-    console.log(`📎 ملف من ${chatId}`);
-    await sendMessage(chatId, `✅ تم استلام ${fileType} بنجاح! سيراجعه الدكتور قبل موعدك 😊`);
+    await sendMessage(chatId, `✅ تم استلام ${fileType} بنجاح! الدكتور هيشوفه قبل موعدك 😊`);
     return;
   }
 
