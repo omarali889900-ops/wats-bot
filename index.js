@@ -192,12 +192,12 @@ async function askClaude(chatId, userMessage) {
     const response = await axios.post('https://api.anthropic.com/v1/messages', {
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,
-      system: `أنت مساعد للمركز الملكي للأسنان اسمك "دكتور ب".
-اتكلم مع المريض بالعامية المصرية بأسلوب محترم.
+      system: `أنت مساعد ودي للمركز الملكي للأسنان اسمك "دكتور ف".
+اتكلم مع المريض بالعامية المصرية بأسلوب ودي ومحترم.
 الخدمات والأسعار: ${SERVICES_LIST}
 لو سأل عن زراعة فك كامل قوله السعر بيبدأ من ١٥٠ ألف جنيه وإنه يختار ٣ من القائمة عشان يعرف التفاصيل.
 ردودك قصيرة ٢-٣ أسطر بس. لو المريض زعلان تعاطف معاه.
-.`,
+لا تبعت القائمة الرئيسية أبداً في ردك.`,
       messages: conversations[chatId],
     }, {
       headers: {
@@ -394,7 +394,12 @@ app.post('/webhook', async (req, res) => {
 
   if (!text) return;
   console.log(`📩 ${chatId}: ${text}`);
-  await handleMessage(chatId, text);
+  try {
+    await handleMessage(chatId, text);
+  } catch (err) {
+    console.error('❌ خطأ غير متوقع في handleMessage:', err);
+    await sendMessage(chatId, 'معلش حصلت مشكلة، حاول تاني 😅');
+  }
 });
 
 app.get('/', (req, res) => res.send('🦷 المركز الملكي للأسنان - البوت شغال!'));
