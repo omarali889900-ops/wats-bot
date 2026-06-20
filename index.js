@@ -137,12 +137,15 @@ const conversations = {};
 
 async function sendMessage(chatId, message) {
   try {
+    console.log('📤 محاولة إرسال رسالة لـ', chatId);
     const url = `https://7107.api.greenapi.com/waInstance${ID_INSTANCE}/sendMessage/${API_TOKEN}`;
-    await axios.post(url, { chatId, message }, {
-      headers: { 'Content-Type': 'application/json' }
+    const res = await axios.post(url, { chatId, message }, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000
     });
+    console.log('✅ تم الإرسال، الاستجابة:', JSON.stringify(res.data));
   } catch (err) {
-    console.error('خطأ في الإرسال:', err.message);
+    console.error('❌ خطأ في الإرسال:', err.response?.status, err.response?.data || err.message);
   }
 }
 
