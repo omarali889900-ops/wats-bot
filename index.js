@@ -192,7 +192,7 @@ async function askClaude(chatId, userMessage) {
     const response = await axios.post('https://api.anthropic.com/v1/messages', {
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,
-      system: `أنت مساعد ودي للمركز الملكي للأسنان اسمك "دكتور ف".
+      system: `أنت مساعد ودي للمركز الملكي للأسنان اسمك "دكتور س".
 اتكلم مع المريض بالعامية المصرية بأسلوب ودي ومحترم.
 الخدمات والأسعار: ${SERVICES_LIST}
 لو سأل عن زراعة فك كامل قوله السعر بيبدأ من ١٥٠ ألف جنيه وإنه يختار ٣ من القائمة عشان يعرف التفاصيل.
@@ -376,6 +376,7 @@ async function handleMessage(chatId, text) {
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
   const body = req.body;
+  console.log('🔍 نوع الويب هوك:', body.typeWebhook);
   if (body.typeWebhook !== 'incomingMessageReceived') return;
 
   const chatId = body.senderData?.chatId;
